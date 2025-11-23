@@ -14,6 +14,11 @@ Parameters:
   pProjectName:
     Type: String
 
+Conditions:
+  HasSubDomain: !And
+    - !Not [!Equals [!Ref pSubDomain, ""]]
+    - !Not [!Equals [!Ref pSubDomain, "NONE"]]
+
 Resources:
   S3StaticBucket:
     Type: AWS::S3::Bucket
@@ -131,7 +136,10 @@ Resources:
             Override: true
             Preload: true
           ContentSecurityPolicy:
-            ContentSecurityPolicy: !Sub "default-src 'none'; img-src 'self'; script-src 'self'; style-src 'self'; object-src 'none' ; font-src 'self' data:; connect-src 'self' https://${pSubDomain}.${pDomain}/"
+            ContentSecurityPolicy: !If
+              - HasSubDomain
+              - !Sub "default-src 'none'; img-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; object-src 'none' ; font-src 'self' data:; connect-src 'self' https://${pSubDomain}.${pDomain}/"
+              - !Sub "default-src 'none'; img-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; object-src 'none' ; font-src 'self' data:; connect-src 'self' https://${pDomain}/"
             Override: true
           ContentTypeOptions:
             Override: true

@@ -16,8 +16,26 @@ input.addEventListener("keypress", function (event) {
   }
 });
 
+function isValidURL(string) {
+  try {
+    const url = new URL(string);
+    // Check if protocol is http or https
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch (_) {
+    return false;
+  }
+}
+
 function shortenURL() {
   const url = document.getElementById("url").value;
+
+  // Validate URL before calling API
+  if (!isValidURL(url)) {
+    document.getElementById("shortened-url").innerHTML =
+      `<p style="color: red;">Error: Please enter a valid URL (e.g., https://example.com)</p>`;
+    return;
+  }
+
   const endpoint = "https://__PLACEHOLDER__/create";
   const request = new XMLHttpRequest();
   request.open("POST", endpoint, true);

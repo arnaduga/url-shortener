@@ -22,6 +22,7 @@ logging.basicConfig(
 # Set variables
 domain = os.getenv("DOMAIN")
 sub_domain = os.getenv("SUB_DOMAIN")
+api_domain = os.getenv("API_DOMAIN")  # Will be either "subdomain.domain" or just "domain"
 aws_region = os.getenv("AWS_REGION")
 fallback_url = os.getenv("FALLBACK_URL")
 table_name = os.getenv("TABLE_NAME")
@@ -31,7 +32,7 @@ string_format = ascii_letters + digits
 
 # CORS configuration
 website_url = "https://short." + domain
-api_endpoint = "https://" + sub_domain + "." + domain
+api_endpoint = "https://" + api_domain
 allowed_origins = [api_endpoint, website_url]
 
 ddb = boto3.resource("dynamodb", region_name=aws_region).Table(table_name)
@@ -156,7 +157,7 @@ def create(event, context):
         short_id = generate_id(False)
     else:
         short_id = generate_id(True)
-    short_url = "https://" + sub_domain + "." + domain + "/" + short_id
+    short_url = "https://" + api_domain + "/" + short_id
 
 
 

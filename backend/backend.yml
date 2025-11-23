@@ -32,6 +32,12 @@ Parameters:
     Type: String
 
 ###########################################################
+Conditions:
+  HasSubDomain: !And
+    - !Not [!Equals [!Ref pSubDomain, ""]]
+    - !Not [!Equals [!Ref pSubDomain, "NONE"]]
+
+###########################################################
 Resources:
   ###########################################################
   ShortenerFunction:
@@ -65,6 +71,7 @@ Resources:
         Variables:
           DOMAIN: !Ref pDomain
           SUB_DOMAIN: !Ref pSubDomain
+          API_DOMAIN: !If [HasSubDomain, !Sub "${pSubDomain}.${pDomain}", !Ref pDomain]
           FALLBACK_URL: !Ref pFallbackUrl
           ENVIRONMENT: !Ref pEnv
           TABLE_NAME: !Sub "${pProductName}-${pProjectName}-url-table-${pEnv}"
@@ -84,14 +91,14 @@ Resources:
         Project: !Ref pProjectName
         Product: !Ref pProductName
         Environment: !Ref pEnv
-        Endpoint: !Sub ${pSubDomain}.${pDomain}
+        Endpoint: !If [HasSubDomain, !Sub "${pSubDomain}.${pDomain}", !Ref pDomain]
 
   APIGateway:
     Type: AWS::Serverless::Api
     DependsOn: ShortenerFunction
     Properties:
       Domain:
-        DomainName: !Sub ${pSubDomain}.${pDomain}
+        DomainName: !If [HasSubDomain, !Sub "${pSubDomain}.${pDomain}", !Ref pDomain]
         CertificateArn: !Ref pCertificateArn
         EndpointConfiguration: EDGE
         Route53:

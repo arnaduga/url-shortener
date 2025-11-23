@@ -30,7 +30,7 @@ MaxChar := 3
 
 # DNS
 Domain := <REPLACE_ME>
-SubDomain := <REPLACE_ME>
+SubDomain :=
 # Existing Route53 ZoneId
 HostedZoneId := <REPLACE_ME>
 FallbackUrl := https://zoph.io # <REPLACE_ME>
@@ -50,7 +50,11 @@ build: clean
 	sam build
 
 url:
-	@echo '{"long_url": "$(filter-out $@,$(MAKECMDGOALS))"}' | http POST https://${SubDomain}.${Domain}/create
+	@if [ -z "${SubDomain}" ]; then \
+		echo '{"long_url": "$(filter-out $@,$(MAKECMDGOALS))"}' | http POST https://${Domain}/create; \
+	else \
+		echo '{"long_url": "$(filter-out $@,$(MAKECMDGOALS))"}' | http POST https://${SubDomain}.${Domain}/create; \
+	fi
 
 
 # Used to pass parameters directly with makefile (ie: make url)
@@ -82,7 +86,11 @@ deploy: build
 		--no-fail-on-empty-changeset
 	
 setup_front:
-	@sed -e "s/\__PLACEHOLDER__/${SubDomain}.${Domain}/" ./frontend/js.js > ./frontend/script.js
+	@if [ -z "${SubDomain}" ]; then \
+		sed -e "s/\__PLACEHOLDER__/${Domain}/" ./frontend/js.js > ./frontend/script.js; \
+	else \
+		sed -e "s/\__PLACEHOLDER__/${SubDomain}.${Domain}/" ./frontend/js.js > ./frontend/script.js; \
+	fi
 	@aws s3 cp ./frontend/index.htm s3://short.${Domain}/
 	@aws s3 cp ./frontend/styles.css s3://short.${Domain}/
 	@aws s3 cp ./frontend/script.js s3://short.${Domain}/
