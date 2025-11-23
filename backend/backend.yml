@@ -30,6 +30,9 @@ Parameters:
     Type: String
   pFallbackUrl:
     Type: String
+  pGoogleClientId:
+    Type: String
+    Description: Google OAuth Client ID
 
 ###########################################################
 Conditions:
@@ -40,6 +43,35 @@ Conditions:
 ###########################################################
 Resources:
   ###########################################################
+  AuthorizerFunction:
+    Type: "AWS::Serverless::Function"
+    Properties:
+      FunctionName: !Sub ${pProductName}-${pProjectName}-authorizer-${pEnv}
+      Description: Google OAuth authorizer for URL shortener
+      Handler: authorizer.lambda_handler
+      Runtime: python3.10
+      CodeUri: ../authorizer/
+      MemorySize: 256
+      Architectures:
+        - arm64
+      Timeout: 30
+      Environment:
+        Variables:
+          AUTH_USERS_TABLE: !Sub "${pProductName}-${pProjectName}-auth-users-${pEnv}"
+          GOOGLE_CLIENT_ID: !Ref pGoogleClientId
+      Policies:
+        - Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:UpdateItem
+              Resource: !GetAtt AuthUsersTable.Arn
+      Tags:
+        Project: !Ref pProjectName
+        Product: !Ref pProductName
+        Environment: !Ref pEnv
+
   ShortenerFunction:
     Type: "AWS::Serverless::Function"
     Properties:
@@ -113,9 +145,21 @@ Resources:
         basePath: /prod
         schemes:
           - "https"
+        securityDefinitions:
+          GoogleAuth:
+            type: "apiKey"
+            name: "Authorization"
+            in: "header"
+            x-amazon-apigateway-authtype: "custom"
+            x-amazon-apigateway-authorizer:
+              type: "token"
+              authorizerUri: !Sub "arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${AuthorizerFunction.Arn}/invocations"
+              authorizerResultTtlInSeconds: 300
         paths:
           /create:
             post:
+              security:
+                - GoogleAuth: []
               produces:
                 - "application/json"
               responses:
@@ -184,6 +228,25 @@ Resources:
       TimeToLiveSpecification:
         AttributeName: ttl
         Enabled: true
+
+  AuthUsersTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      AttributeDefinitions:
+        - AttributeName: email
+          AttributeType: S
+      KeySchema:
+        - AttributeName: email
+          KeyType: HASH
+      BillingMode: PAY_PER_REQUEST
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      TableName: !Sub "${pProductName}-${pProjectName}-auth-users-${pEnv}"
+      Tags:
+        - Key: Project
+          Value: !Ref pProjectName
+        - Key: Product
+          Value: !Ref pProductName
 
   ShortenerLambdaLogGroup:
     Type: AWS::Logs::LogGroup

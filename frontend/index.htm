@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>URL Shortener</title>
     <link rel="stylesheet" href="styles.css" />
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
   </head>
   <body>
     <div class="background-gradient"></div>
@@ -19,9 +20,15 @@
           <h1>URL Shortener</h1>
         </div>
         <p class="subtitle">Transform long URLs into short, shareable links</p>
+
+        <!-- Auth status -->
+        <div class="auth-container">
+          <div id="auth-status" class="auth-status"></div>
+          <div id="google-signin-button"></div>
+        </div>
       </header>
 
-      <div class="card">
+      <div class="card" id="main-card" style="display: none;">
         <form>
           <div class="input-group">
             <label for="url">Enter your URL</label>

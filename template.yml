@@ -42,6 +42,9 @@ Parameters:
   pFallbackUrl:
     Type: String
     Description: Fallback URL when no long url is found in DynamoDB Table
+  pGoogleClientId:
+    Type: String
+    Description: Google OAuth Client ID for authentication
 
 Resources:
   FrontStack:
@@ -73,6 +76,7 @@ Resources:
         pDomain: !Ref pDomain
         pSubDomain: !Ref pSubDomain
         pFallbackUrl: !Ref pFallbackUrl
+        pGoogleClientId: !Ref pGoogleClientId
 
 Outputs:
   S3BucketLogs:
