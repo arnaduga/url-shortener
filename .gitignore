@@ -230,3 +230,12 @@ cython_debug/
 .vscode
 .aws-sam/build.toml
 frontend/script.js
+
+# Makefiles with sensitive configuration
+Makefile-fr
+makefile.bck
+Makefile.local
+Makefile.*.bak
+
+# Python version
+.python-version
