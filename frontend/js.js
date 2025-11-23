@@ -1,83 +1,150 @@
-document.getElementById("shorten-button").addEventListener("click", shortenURL);
-
-var input = document.getElementById("url");
-
-// Options zone management
+// ===== DOM Elements =====
+const urlInput = document.getElementById("url");
+const shortenButton = document.getElementById("shorten-button");
+const optionsToggle = document.getElementById("options-toggle");
 const optionsContent = document.getElementById("options-content");
-document.getElementById("options-toggle").addEventListener('click', () => {
-  optionsContent.style.display = (optionsContent.style.display === 'block') ? 'none' : 'block';
-  displayOptionsText()
-});
+const humanReadableCheckbox = document.getElementById("human-readable");
+const expiryInput = document.getElementById("option-expiry");
+const shortenedUrlContainer = document.getElementById("shortened-url");
 
-input.addEventListener("keypress", function (event) {
+// ===== Event Listeners =====
+shortenButton.addEventListener("click", shortenURL);
+optionsToggle.addEventListener("click", toggleOptions);
+
+urlInput.addEventListener("keypress", function (event) {
   if (event.key === "Enter") {
     event.preventDefault();
-    document.getElementById("shorten-button").click();
+    shortenButton.click();
   }
 });
 
+// ===== Options Toggle =====
+function toggleOptions() {
+  const isActive = optionsContent.classList.contains("active");
+
+  if (isActive) {
+    optionsContent.classList.remove("active");
+    optionsToggle.classList.remove("active");
+  } else {
+    optionsContent.classList.add("active");
+    optionsToggle.classList.add("active");
+  }
+}
+
+// ===== URL Validation =====
 function isValidURL(string) {
   try {
     const url = new URL(string);
-    // Check if protocol is http or https
     return url.protocol === "http:" || url.protocol === "https:";
   } catch (_) {
     return false;
   }
 }
 
-function shortenURL() {
-  const url = document.getElementById("url").value;
+// ===== Copy to Clipboard =====
+function copyToClipboard(text, button) {
+  navigator.clipboard.writeText(text).then(() => {
+    const originalText = button.textContent;
+    button.textContent = "Copied!";
+    button.classList.add("copied");
 
-  // Validate URL before calling API
-  if (!isValidURL(url)) {
-    document.getElementById("shortened-url").innerHTML =
-      `<p style="color: red;">Error: Please enter a valid URL (e.g., https://example.com)</p>`;
+    setTimeout(() => {
+      button.textContent = originalText;
+      button.classList.remove("copied");
+    }, 2000);
+  }).catch(err => {
+    console.error("Failed to copy:", err);
+  });
+}
+
+// ===== Display Results =====
+function displaySuccess(shortenedURL) {
+  shortenedUrlContainer.innerHTML = `
+    <div class="result-success">
+      <div class="result-title">Your shortened URL is ready</div>
+      <div class="result-url-container">
+        <a href="${shortenedURL}" target="_blank" class="result-url">${shortenedURL}</a>
+        <button class="btn-copy" onclick="copyToClipboard('${shortenedURL}', this)">Copy</button>
+      </div>
+    </div>
+  `;
+  shortenedUrlContainer.classList.add("show");
+}
+
+function displayError(message) {
+  shortenedUrlContainer.innerHTML = `
+    <div class="result-error">
+      ${message}
+    </div>
+  `;
+  shortenedUrlContainer.classList.add("show");
+}
+
+// ===== Shorten URL =====
+function shortenURL() {
+  const url = urlInput.value.trim();
+
+  // Validate URL
+  if (!url) {
+    displayError("Please enter a URL");
     return;
   }
 
+  if (!isValidURL(url)) {
+    displayError("Please enter a valid URL (e.g., https://example.com)");
+    return;
+  }
+
+  // Prepare request body
+  const body = {
+    long_url: url,
+    human_readable: humanReadableCheckbox.checked
+  };
+
+  const expiry = parseInt(expiryInput.value);
+  if (expiry) {
+    body.ttl_in_days = expiry;
+  }
+
+  // Show loading state
+  shortenButton.disabled = true;
+  const originalButtonHTML = shortenButton.innerHTML;
+  shortenButton.innerHTML = '<span>Shortening...</span>';
+
+  // Make API request
   const endpoint = "https://__PLACEHOLDER__/create";
   const request = new XMLHttpRequest();
   request.open("POST", endpoint, true);
+  request.setRequestHeader("Content-Type", "application/json");
 
   request.onload = function () {
-    const data = JSON.parse(request.responseText);
-    const shortenedURL = data.short_url;
-    if (request.status >= 200 && request.status < 400) {
-      document.getElementById(
-        "shortened-url"
-      ).innerHTML = `<p>Shortened URL: <a href="${shortenedURL}" target="_blank">${shortenedURL}</a></p>`;
-    } else {
-      document.getElementById(
-        "shortened-url"
-      ).innerHTML = `<p>Error: ${request.responseText}</a></p>`;
+    // Reset button state
+    shortenButton.disabled = false;
+    shortenButton.innerHTML = originalButtonHTML;
+
+    try {
+      const data = JSON.parse(request.responseText);
+
+      if (request.status >= 200 && request.status < 400) {
+        displaySuccess(data.short_url);
+        urlInput.value = "";
+      } else {
+        displayError(data.message || "An error occurred while shortening the URL");
+      }
+    } catch (e) {
+      displayError("Failed to process the response");
     }
   };
 
-  // Preparing the boyd
-  var body = { long_url: url }
-
-  // Get expiration delay
-  var expiry = document.getElementById("option-expiry").value;
-  if (parseInt(expiry)) body.ttl_in_days=parseInt(expiry)
-
-  // Get humand readability  
-  var humanReadable = document.getElementById("human-readable")
-  body.human_readable=humanReadable.checked;
+  request.onerror = function () {
+    shortenButton.disabled = false;
+    shortenButton.innerHTML = originalButtonHTML;
+    displayError("Network error. Please try again.");
+  };
 
   request.send(JSON.stringify(body));
-  document.getElementById("url").value = "";
 }
 
-// Let's display the correct text for the options label, based on content visibility
-function displayOptionsText() {
-  const optionTxt_expanded = "<span style='font-size: xx-large'>⚒️</span> Options &#9660;"
-  const optionTxt_collapsed = "<span style='font-size: xx-large'>⚒️</span> Options &#9658;"
-  if (optionsContent.style.display === 'block') {
-    document.getElementById("options-toggle").innerHTML = optionTxt_expanded
-  } else {
-    document.getElementById("options-toggle").innerHTML = optionTxt_collapsed
-  }
-}
-
-displayOptionsText()
+// ===== Initialize =====
+// Focus on input on page load
+urlInput.focus();

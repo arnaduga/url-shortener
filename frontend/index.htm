@@ -1,37 +1,100 @@
-<html>
+<!DOCTYPE html>
+<html lang="en">
   <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>URL Shortener</title>
     <link rel="stylesheet" href="styles.css" />
-    <meta charset="UTF-8" />
   </head>
   <body>
-    <h1>URL Shortener</h1>
-    <form>
-      <label for="url">🔗 Long URL</label>
-      <input type="text" id="url" name="url" placeholder="https://google.fr" />
-      <div id="options-container">
-        <h4 id="options-toggle"></h4>
-        <div id="options-content" style="display: none">
-          <table class="optionsTable">
-            <tr>
-              <td class="col left"><label class="options" for="human-readable">Human readable version:</label></td>
-              <td class="col right"><input type="checkbox" id="human-readable" /></td>
-            </tr>
-            <tr>
-              <td class="col left">
-                <label class="options" for="option-expiry">Expiration (in days) </label>
-              </td>
-              <td class="col right">
-                <input type="number" id="option-expiry" value="7"  />
-              </td>
-            </tr>
-          </table>
+    <div class="background-gradient"></div>
+
+    <div class="container">
+      <header>
+        <div class="logo">
+          <svg class="logo-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
+            <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
+          </svg>
+          <h1>URL Shortener</h1>
         </div>
+        <p class="subtitle">Transform long URLs into short, shareable links</p>
+      </header>
+
+      <div class="card">
+        <form>
+          <div class="input-group">
+            <label for="url">Enter your URL</label>
+            <div class="input-wrapper">
+              <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
+                <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
+              </svg>
+              <input
+                type="text"
+                id="url"
+                name="url"
+                placeholder="https://example.com/your-very-long-url"
+                autocomplete="off"
+                spellcheck="false"
+              />
+            </div>
+          </div>
+
+          <div class="options-container">
+            <button type="button" class="options-toggle" id="options-toggle">
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="3"></circle>
+                <path d="M12 1v6m0 6v6m5.2-13.2l-4.2 4.2m0 6l-4.2 4.2M23 12h-6m-6 0H5m13.2 5.2l-4.2-4.2m0-6l-4.2-4.2"></path>
+              </svg>
+              <span>Advanced Options</span>
+              <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="6 9 12 15 18 9"></polyline>
+              </svg>
+            </button>
+
+            <div class="options-content" id="options-content">
+              <div class="option-row">
+                <div class="option-info">
+                  <label for="human-readable">Human Readable</label>
+                  <span class="option-description">Generate pronounceable short URLs</span>
+                </div>
+                <label class="toggle-switch">
+                  <input type="checkbox" id="human-readable" />
+                  <span class="toggle-slider"></span>
+                </label>
+              </div>
+
+              <div class="option-row">
+                <div class="option-info">
+                  <label for="option-expiry">Expiration</label>
+                  <span class="option-description">Link expires after specified days</span>
+                </div>
+                <div class="expiry-input-wrapper">
+                  <input type="number" id="option-expiry" value="7" min="1" max="365" />
+                  <span class="expiry-unit">days</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <button type="button" class="btn-primary" id="shorten-button">
+            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+              <polyline points="12 5 19 12 12 19"></polyline>
+            </svg>
+            <span>Shorten URL</span>
+          </button>
+        </form>
+
+        <div id="shortened-url"></div>
       </div>
-      <input type="button" value="Shorten ✂" id="shorten-button" />
-    </form>
-    <div id="shortened-url"></div>
+
+      <footer>
+        <p>Created with care by <a href="https://zoph.io" target="_blank">zoph.io</a></p>
+      </footer>
+    </div>
+
     <script src="script.js"></script>
-    <p><a href="https://zoph.io" target="_blank">from zoph.io 🫶</a></p>
   </body>
 </html>
