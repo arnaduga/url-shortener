@@ -72,6 +72,14 @@ Resources:
         Product: !Ref pProductName
         Environment: !Ref pEnv
 
+  AuthorizerInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !GetAtt AuthorizerFunction.Arn
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${APIGateway}/*"
+
   ShortenerFunction:
     Type: "AWS::Serverless::Function"
     Properties:
@@ -157,6 +165,37 @@ Resources:
               authorizerResultTtlInSeconds: 300
         paths:
           /create:
+            options:
+              consumes:
+                - "application/json"
+              produces:
+                - "application/json"
+              responses:
+                "200":
+                  description: "200 response"
+                  schema:
+                    $ref: "#/definitions/Empty"
+                  headers:
+                    Access-Control-Allow-Origin:
+                      type: "string"
+                    Access-Control-Allow-Methods:
+                      type: "string"
+                    Access-Control-Allow-Headers:
+                      type: "string"
+              x-amazon-apigateway-integration:
+                responses:
+                  default:
+                    statusCode: "200"
+                    responseParameters:
+                      method.response.header.Access-Control-Allow-Methods: "'GET,POST,OPTIONS'"
+                      method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+                      method.response.header.Access-Control-Allow-Origin: !Sub
+                        - "'${WebsiteUrl}'"
+                        - WebsiteUrl: !Sub "https://short.${pDomain}"
+                requestTemplates:
+                  application/json: '{"statusCode": 200}'
+                passthroughBehavior: "when_no_match"
+                type: "mock"
             post:
               security:
                 - GoogleAuth: []
@@ -178,6 +217,7 @@ Resources:
                 type: "aws_proxy"
           /{shortid}:
             get:
+              security: []  # Public endpoint - no authentication required
               consumes:
                 - "application/json"
               parameters:
@@ -204,6 +244,47 @@ Resources:
                 passthroughBehavior: "when_no_templates"
                 contentHandling: "CONVERT_TO_TEXT"
                 type: "aws"
+        x-amazon-apigateway-gateway-responses:
+          MISSING_AUTHENTICATION_TOKEN:
+            statusCode: 404
+            responseParameters:
+              gatewayresponse.header.Access-Control-Allow-Origin: "'*'"
+            responseTemplates:
+              application/json: |
+                {
+                  "message": "Resource not found",
+                  "error": "404 Not Found"
+                }
+          RESOURCE_NOT_FOUND:
+            statusCode: 404
+            responseParameters:
+              gatewayresponse.header.Access-Control-Allow-Origin: "'*'"
+            responseTemplates:
+              application/json: |
+                {
+                  "message": "Resource not found",
+                  "error": "404 Not Found"
+                }
+          UNAUTHORIZED:
+            statusCode: 401
+            responseParameters:
+              gatewayresponse.header.Access-Control-Allow-Origin: "'*'"
+            responseTemplates:
+              application/json: |
+                {
+                  "message": "Unauthorized - Authentication required",
+                  "error": "401 Unauthorized"
+                }
+          ACCESS_DENIED:
+            statusCode: 403
+            responseParameters:
+              gatewayresponse.header.Access-Control-Allow-Origin: "'*'"
+            responseTemplates:
+              application/json: |
+                {
+                  "message": "Access denied - You are not authorized to use this service",
+                  "error": "403 Forbidden"
+                }
 
   UrlDynamoTable:
     Type: AWS::DynamoDB::Table
