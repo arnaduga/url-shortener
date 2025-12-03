@@ -1,17 +1,5 @@
 # 🔗 url-shortener
 
-## 🧠 Rationale
-
-This _yet another url-shortener_, is the one I'm using for [AWS Security Digest Newsletter](https://awssecuritydigest.com) to track click rate from my readers.
-
-I wasn't able to find an existing solution that match my needs so I crafted my own version, another excuse to learn something new 🤓.
-
-Try out this AWS serverless url-shortener for your own usage and see the benefits it can bring.
-
-It's perfect for shortening links and tracking analytics.
-
-Plus, contributions and pull requests are welcome.
-
 ## 💡 Features
 
 1. **Google OAuth Authentication** - Secure access with Google Identity Services
