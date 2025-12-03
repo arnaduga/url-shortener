@@ -51,21 +51,16 @@ This guide will walk you through setting up Google OAuth for your URL shortener 
 
 4. Click **"Save and Continue"**
 
-**Scopes:**
-5. Click **"Add or Remove Scopes"**
-6. Add the following scopes:
-   - `.../auth/userinfo.email`
-   - `.../auth/userinfo.profile`
-   - `openid`
+**Scopes:** 5. Click **"Add or Remove Scopes"** 6. Add the following scopes:
+
+- `.../auth/userinfo.email`
+- `.../auth/userinfo.profile`
+- `openid`
+
 7. Click **"Update"**
 8. Click **"Save and Continue"**
 
-**Test users (for testing phase):**
-9. Click **"Add Users"**
-10. Add your test email addresses:
-    - `user1@example.com`
-    - `user2@example.com`
-11. Click **"Save and Continue"**
+**Test users (for testing phase):** 9. Click **"Add Users"** 10. Add your test email addresses: - `user1@example.com` - `user2@example.com` 11. Click **"Save and Continue"**
 
 12. Review the summary and click **"Back to Dashboard"**
 
@@ -80,32 +75,36 @@ This guide will walk you through setting up Google OAuth for your URL shortener 
 4. **Application type**: Select **"Web application"**
 5. **Name**: `URL Shortener Web Client`
 6. **Authorized JavaScript origins**: Add the following URIs:
-   - `https://example.com`
-   - `https://short.example.com`
+
+   - `https://<yourDomain>`
+   - `https://short.<yourDomain>`
    - `http://localhost:8000` (for local testing if needed)
 
 7. **Authorized redirect URIs**: Add:
-   - `https://short.example.com`
-   - `https://example.com`
+
+   - `https://short.<yourDomain>`
+   - `https://<yourDomain>`
 
 8. Click **"Create"**
 
 ### 6. Get Your Client ID
 
 After creating the OAuth client, a popup will appear with:
+
 - **Client ID**: Something like `123456789-abcdefgh.apps.googleusercontent.com`
 - **Client Secret**: (Not needed for frontend OAuth)
 
 **IMPORTANT**: Copy the **Client ID** - you'll need it for configuration!
 
 You can also find it later by:
+
 1. Going to **"APIs & Services"** > **"Credentials"**
 2. Finding your OAuth 2.0 Client ID in the list
 3. Clicking on it to see the Client ID
 
 ### 7. Configure Your Application
 
-Update your `Makefile-fr` with the Client ID:
+Update your `Makefile` with the Client ID:
 
 ```makefile
 # Authentication
@@ -133,6 +132,7 @@ To allow anyone to sign in:
 Even though users can sign in with Google, only emails in your DynamoDB `auth-users` table with `status: active` will be able to create short URLs.
 
 The authorization flow is:
+
 1. User signs in with Google → Gets ID token
 2. Frontend sends token to API
 3. Lambda Authorizer validates token with Google
@@ -148,6 +148,7 @@ python scripts/add_authorized_user.py user1@example.com
 ```
 
 Or manually in AWS Console:
+
 1. Go to DynamoDB
 2. Find table: `url-shortener-myproject-auth-users-prod`
 3. Create item with:
@@ -165,6 +166,7 @@ To remove this warning, you need to complete Google's verification process (only
 ### "Access blocked: This app's request is invalid"
 
 Check that:
+
 - Your authorized JavaScript origins are correct
 - Your authorized redirect URIs match your domain
 - You're accessing the app via HTTPS (not HTTP)
@@ -172,6 +174,7 @@ Check that:
 ### Users can't sign in
 
 Check that:
+
 - The user's email is added as a test user in OAuth consent screen (if app is not published)
 - The Client ID in your Makefile-fr is correct
 - The Google Sign-In library is loading (check browser console)
@@ -189,5 +192,6 @@ After obtaining your Client ID:
 ## Support
 
 For more information, see:
+
 - [Google Sign-In Documentation](https://developers.google.com/identity/gsi/web/guides/overview)
 - [OAuth 2.0 Documentation](https://developers.google.com/identity/protocols/oauth2)
