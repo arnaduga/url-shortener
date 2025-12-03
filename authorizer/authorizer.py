@@ -52,53 +52,47 @@ def verify_google_token(token, client_id):
         }
 
 def check_user_authorized(email):
-    """Check if user email is in authorized users table"""
+    """Check if user email is in authorized users table (atomic check)"""
     try:
-        response = auth_table.get_item(Key={'email': email})
-
-        if 'Item' not in response:
-            return False
-
-        user = response['Item']
-
-        # Check if user is active
-        if user.get('status') != 'active':
-            return False
-
-        # Update last_login
+        # Use conditional update to atomically check status and update last_login
+        # This prevents race conditions where user is revoked between check and update
         auth_table.update_item(
             Key={'email': email},
             UpdateExpression='SET last_login = :timestamp',
+            ConditionExpression='attribute_exists(email) AND #status = :active',
+            ExpressionAttributeNames={'#status': 'status'},
             ExpressionAttributeValues={
-                ':timestamp': datetime.utcnow().isoformat()
-            }
+                ':timestamp': datetime.utcnow().isoformat(),
+                ':active': 'active'
+            },
+            ReturnValues='ALL_NEW'
         )
-
         return True
     except Exception as e:
+        # ConditionalCheckFailedException means user doesn't exist or status != active
         print(f"Error checking user authorization: {str(e)}")
         return False
 
 def lambda_handler(event, context):
     """
     Lambda authorizer for API Gateway
-    Validates Google OAuth token and checks user authorization
+    Validates Google ID token from Authorization header (Bearer token)
+    This is for client-side PKCE flow where frontend handles OAuth
     """
     print(f"Authorizer event: {json.dumps(event)}")
 
-    # Get the token from Authorization header
-    token = event.get('authorizationToken', '')
+    # Get token from Authorization header only
+    auth_token = event.get('authorizationToken', '')
 
-    # Remove 'Bearer ' prefix if present
-    if token.startswith('Bearer '):
-        token = token[7:]
+    if not auth_token.startswith('Bearer '):
+        print("No Bearer token provided in Authorization header")
+        raise Exception('Unauthorized')
+
+    token = auth_token[7:]
+    print("Token found in Authorization header")
 
     # Get method ARN for policy generation
     method_arn = event.get('methodArn')
-
-    if not token:
-        print("No token provided")
-        raise Exception('Unauthorized')
 
     # Get Google Client ID from environment
     google_client_id = os.environ.get('GOOGLE_CLIENT_ID')
@@ -127,10 +121,19 @@ def lambda_handler(event, context):
 
     print(f"User {email} authorized successfully")
 
-    # Generate allow policy
+    # Generate allow policy for ALL resources in this API
+    # Convert specific method ARN to wildcard to allow all methods/resources
+    # Format: arn:aws:execute-api:region:account:api-id/stage/method/resource
+    # We want: arn:aws:execute-api:region:account:api-id/stage/*/*
+    arn_parts = method_arn.split('/')
+    base_arn = '/'.join(arn_parts[:2])  # Get arn:aws:execute-api:region:account:api-id/stage
+    wildcard_arn = f"{base_arn}/*/*"
+
+    print(f"Generating policy for: {wildcard_arn}")
+
     return generate_policy(
         email,
         'Allow',
-        method_arn,
+        wildcard_arn,
         context={'email': email}
     )

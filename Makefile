@@ -43,6 +43,9 @@ AWSRegion := eu-west-1
 
 # Monitoring
 AlertsRecipient := <REPLACE_ME>
+
+# Authentication (Client-side PKCE only needs Client ID)
+GoogleClientId := <REPLACE_ME>
 #######################################################
 DistributionId := $(shell aws cloudfront list-distributions --query 'DistributionList.Items[?Origins.Items[0].DomainName==`short.${Domain}.s3.${AWSRegion}.amazonaws.com`].Id | [0]' --output text)
 
@@ -83,19 +86,26 @@ deploy: build
 			pHostedZoneId=${HostedZoneId} \
 			pCertificateArn='${CertificateArn}' \
 			pFallbackUrl='${FallbackUrl}' \
+			pGoogleClientId='${GoogleClientId}' \
 		--no-fail-on-empty-changeset
 	
 setup_front:
-	@if [ -z "${SubDomain}" ]; then \
-		sed -e "s/\__PLACEHOLDER__/${Domain}/" ./frontend/js.js > ./frontend/script.js; \
-	else \
-		sed -e "s/\__PLACEHOLDER__/${SubDomain}.${Domain}/" ./frontend/js.js > ./frontend/script.js; \
-	fi
-	@aws s3 cp ./frontend/index.htm s3://short.${Domain}/
-	@aws s3 cp ./frontend/styles.css s3://short.${Domain}/
-	@aws s3 cp ./frontend/script.js s3://short.${Domain}/
-	@aws s3 cp ./frontend/favicon.ico s3://short.${Domain}/
+	@echo "Building React frontend..."
+	@cd frontend && \
+		if [ -z "${SubDomain}" ]; then \
+			sed -e "s|__PLACEHOLDER__|https://${Domain}|" ./src/config.js > ./src/config.prod.js; \
+		else \
+			sed -e "s|__PLACEHOLDER__|https://${SubDomain}.${Domain}|" ./src/config.js > ./src/config.prod.js; \
+		fi && \
+		mv ./src/config.js ./src/config.backup.js && \
+		mv ./src/config.prod.js ./src/config.js && \
+		npm run build && \
+		mv ./src/config.backup.js ./src/config.js
+	@echo "Deploying frontend to S3..."
+	@aws s3 sync ./frontend/dist/ s3://short.${Domain}/ --delete
+	@echo "Creating CloudFront invalidation..."
 	@aws cloudfront create-invalidation --distribution-id '${DistributionId}' --path "/*"
+	@echo "Frontend deployed successfully!"
 
 delete:
 	sam delete --stack-name "${Project}-${Product}-${Environment}"

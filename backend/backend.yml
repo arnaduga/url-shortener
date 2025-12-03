@@ -80,6 +80,14 @@ Resources:
       Principal: apigateway.amazonaws.com
       SourceArn: !Sub "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${APIGateway}/*"
 
+  ShortenerInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !GetAtt ShortenerFunction.Arn
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${APIGateway}/*"
+
   ShortenerFunction:
     Type: "AWS::Serverless::Function"
     Properties:
@@ -88,21 +96,7 @@ Resources:
       Handler: handlers.main
       Runtime: python3.10
       CodeUri: ../shortener/
-      Events:
-        Create:
-          Type: Api
-          Properties:
-            Path: /create
-            Method: post
-            RestApiId:
-              Ref: APIGateway
-        Retreive:
-          Type: Api
-          Properties:
-            Path: /{shortid}
-            Method: get
-            RestApiId:
-              Ref: APIGateway
+      Events: {}
       MemorySize: 256
       Architectures:
         - arm64
@@ -115,6 +109,7 @@ Resources:
           FALLBACK_URL: !Ref pFallbackUrl
           ENVIRONMENT: !Ref pEnv
           TABLE_NAME: !Sub "${pProductName}-${pProjectName}-url-table-${pEnv}"
+          CLICKS_STATS_TABLE: !Sub "${pProductName}-${pProjectName}-clicks-stats-${pEnv}"
           REGION: !Ref pAWSRegion
           MIN_CHAR: !Ref pMinChar
           MAX_CHAR: !Ref pMaxChar
@@ -127,6 +122,12 @@ Resources:
                 - dynamodb:GetItem
                 - dynamodb:UpdateItem
               Resource: !GetAtt UrlDynamoTable.Arn
+            - Effect: Allow
+              Action:
+                - dynamodb:PutItem
+                - dynamodb:UpdateItem
+                - dynamodb:Query
+              Resource: !GetAtt ClicksStatsTable.Arn
       Tags:
         Project: !Ref pProjectName
         Product: !Ref pProductName
@@ -150,7 +151,6 @@ Resources:
         info:
           version: "1.0"
           title: !Sub ${pProductName}-${pProjectName}-api-${pEnv}
-        basePath: /prod
         schemes:
           - "https"
         securityDefinitions:
@@ -244,6 +244,68 @@ Resources:
                 passthroughBehavior: "when_no_templates"
                 contentHandling: "CONVERT_TO_TEXT"
                 type: "aws"
+          /stats/{shortid}:
+            options:
+              consumes:
+                - "application/json"
+              produces:
+                - "application/json"
+              responses:
+                "200":
+                  description: "200 response"
+                  schema:
+                    $ref: "#/definitions/Empty"
+                  headers:
+                    Access-Control-Allow-Origin:
+                      type: "string"
+                    Access-Control-Allow-Methods:
+                      type: "string"
+                    Access-Control-Allow-Headers:
+                      type: "string"
+              x-amazon-apigateway-integration:
+                responses:
+                  default:
+                    statusCode: "200"
+                    responseParameters:
+                      method.response.header.Access-Control-Allow-Methods: "'GET,OPTIONS'"
+                      method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+                      method.response.header.Access-Control-Allow-Origin: !Sub
+                        - "'${WebsiteUrl}'"
+                        - WebsiteUrl: !Sub "https://short.${pDomain}"
+                requestTemplates:
+                  application/json: '{"statusCode": 200}'
+                passthroughBehavior: "when_no_match"
+                type: "mock"
+            get:
+              security:
+                - GoogleAuth: []
+              consumes:
+                - "application/json"
+              produces:
+                - "application/json"
+              parameters:
+                - name: "shortid"
+                  in: "path"
+                  required: true
+                  type: "string"
+              responses:
+                "200":
+                  description: "200 response"
+                  schema:
+                    $ref: "#/definitions/Empty"
+              x-amazon-apigateway-integration:
+                uri: !Sub "arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${ShortenerFunction.Arn}/invocations"
+                httpMethod: "POST"
+                responses:
+                  default:
+                    statusCode: "200"
+                passthroughBehavior: "when_no_match"
+                contentHandling: "CONVERT_TO_TEXT"
+                type: "aws_proxy"
+        definitions:
+          Empty:
+            type: object
+            title: Empty Schema
         x-amazon-apigateway-gateway-responses:
           MISSING_AUTHENTICATION_TOKEN:
             statusCode: 404
@@ -323,6 +385,32 @@ Resources:
       PointInTimeRecoverySpecification:
         PointInTimeRecoveryEnabled: true
       TableName: !Sub "${pProductName}-${pProjectName}-auth-users-${pEnv}"
+      Tags:
+        - Key: Project
+          Value: !Ref pProjectName
+        - Key: Product
+          Value: !Ref pProductName
+
+  ClicksStatsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      AttributeDefinitions:
+        - AttributeName: short_id
+          AttributeType: S
+        - AttributeName: week
+          AttributeType: S
+      KeySchema:
+        - AttributeName: short_id
+          KeyType: HASH
+        - AttributeName: week
+          KeyType: RANGE
+      BillingMode: PAY_PER_REQUEST
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      TableName: !Sub "${pProductName}-${pProjectName}-clicks-stats-${pEnv}"
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
       Tags:
         - Key: Project
           Value: !Ref pProjectName

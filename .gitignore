@@ -239,3 +239,9 @@ Makefile.*.bak
 
 # Python version
 .python-version
+
+# Frontend archives
+frontend-archive/
+
+# Generated files
+frontend/src/about.json

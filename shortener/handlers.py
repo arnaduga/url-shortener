@@ -1,10 +1,12 @@
 import os
 import json
+from decimal import Decimal
 from botocore.exceptions import ClientError
 import boto3
 from string import ascii_letters, digits
 from random import choice, randint
 from time import strftime, time
+from datetime import datetime
 from urllib import parse
 import logging
 import validators
@@ -26,6 +28,7 @@ api_domain = os.getenv("API_DOMAIN")  # Will be either "subdomain.domain" or jus
 aws_region = os.getenv("AWS_REGION")
 fallback_url = os.getenv("FALLBACK_URL")
 table_name = os.getenv("TABLE_NAME")
+clicks_stats_table_name = os.getenv("CLICKS_STATS_TABLE")
 min_char = int(os.getenv("MIN_CHAR"))
 max_char = int(os.getenv("MAX_CHAR"))
 string_format = ascii_letters + digits
@@ -36,23 +39,98 @@ api_endpoint = "https://" + api_domain
 allowed_origins = [api_endpoint, website_url]
 
 ddb = boto3.resource("dynamodb", region_name=aws_region).Table(table_name)
+clicks_stats_ddb = boto3.resource("dynamodb", region_name=aws_region).Table(clicks_stats_table_name)
+
+def decimal_to_number(obj):
+    """Convert Decimal objects to int or float for JSON serialization"""
+    if isinstance(obj, Decimal):
+        return int(obj) if obj % 1 == 0 else float(obj)
+    raise TypeError(f"Object of type {type(obj)} is not JSON serializable")
 
 def cors_setup(event):
-    if "origin" in event["headers"]:
-        logging.info("Origin header detected: %s", event["headers"]["origin"])
-        origin = event["headers"]["origin"]
+    headers = event.get("headers") or {}
+    if "origin" in headers:
+        logging.info("Origin header detected: %s", headers["origin"])
+        origin = headers["origin"]
         if origin in allowed_origins:
             logging.info("Origin %s is allowed", origin)
         else:
             origin = "https://www.accessdenied.com/" # =)
     else:
         origin = "https://www.accessdenied.com/" # =)
-    
+
     return origin
 
 def generate_timestamp():
     response = strftime("%Y-%m-%dT%H:%M:%S")
     return response
+
+
+def get_current_week():
+    """Returns current week in ISO format: YYYY-WW"""
+    now = datetime.now()
+    iso_calendar = now.isocalendar()
+    return f"{iso_calendar[0]}-W{iso_calendar[1]:02d}"
+
+
+def track_click(short_id, ttl_value):
+    """
+    Track a click for a given short_id in the current week
+    Uses DynamoDB atomic counter to increment the click count
+    """
+    week = get_current_week()
+
+    try:
+        clicks_stats_ddb.update_item(
+            Key={
+                "short_id": short_id,
+                "week": week
+            },
+            UpdateExpression="SET clicks = if_not_exists(clicks, :zero) + :inc, #ttl = :ttl",
+            ExpressionAttributeNames={
+                "#ttl": "ttl"
+            },
+            ExpressionAttributeValues={
+                ":inc": 1,
+                ":zero": 0,
+                ":ttl": int(ttl_value)
+            }
+        )
+        logging.info("Successfully tracked click for short_id: %s, week: %s", short_id, week)
+    except ClientError as error:
+        logging.error("Failed to track click for short_id: %s, week: %s, error: %s", short_id, week, error)
+
+
+def get_stats(short_id):
+    """
+    Retrieve all weekly statistics for a given short_id
+    Returns a list of weeks with their click counts
+    """
+    try:
+        response = clicks_stats_ddb.query(
+            KeyConditionExpression="short_id = :sid",
+            ExpressionAttributeValues={
+                ":sid": short_id
+            }
+        )
+
+        stats = []
+        if "Items" in response:
+            for item in response["Items"]:
+                stats.append({
+                    "week": item.get("week"),
+                    "clicks": item.get("clicks", 0)
+                })
+
+        # Sort by week (descending - most recent first)
+        stats.sort(key=lambda x: x["week"], reverse=True)
+
+        logging.info("Successfully retrieved stats for short_id: %s", short_id)
+        return stats
+
+    except ClientError as error:
+        logging.error("Failed to retrieve stats for short_id: %s, error: %s", short_id, error)
+        return []
 
 
 def expiry_date(days=7):
@@ -102,11 +180,12 @@ def main(event, context):
     logging.info("===> Event: %s", event)
     if "short_id" in event:
         answer = retreiver(event, context)
-
         return answer
     else:
         if "/create" in event["path"] and event["httpMethod"] == "POST":
             answer = create(event, context)
+        elif "/stats/" in event["path"] and event["httpMethod"] == "GET":
+            answer = stats_handler(event, context)
         else:
             cors = cors_setup(event)
             answer = {
@@ -218,6 +297,85 @@ def create(event, context):
     return answer
 
 
+def stats_handler(event, context):
+    """
+    Handler for the /stats/{shortid} endpoint
+    Returns weekly statistics for a given short link
+    """
+    cors = cors_setup(event)
+
+    # Extract short_id from path
+    path_parts = event["path"].strip("/").split("/")
+    if len(path_parts) < 2:
+        return {
+            "statusCode": 400,
+            "headers": {
+                "Access-Control-Allow-Headers": "Content-Type,Authorization",
+                "Access-Control-Allow-Origin": cors,
+                "Access-Control-Allow-Methods": "OPTIONS,GET",
+            },
+            "body": json.dumps({"error": "Missing short_id"}),
+        }
+
+    short_id = path_parts[1]
+    logging.info("Stats requested for short_id: %s", short_id)
+
+    # First, verify the short_id exists
+    try:
+        item = ddb.get_item(Key={"short_id": short_id})
+        if "Item" not in item:
+            return {
+                "statusCode": 404,
+                "headers": {
+                    "Access-Control-Allow-Headers": "Content-Type,Authorization",
+                    "Access-Control-Allow-Origin": cors,
+                    "Access-Control-Allow-Methods": "OPTIONS,GET",
+                },
+                "body": json.dumps({"error": "Short link not found"}),
+            }
+
+        # Get the link details
+        link_info = item["Item"]
+
+        # Get weekly stats
+        weekly_stats = get_stats(short_id)
+
+        # Calculate total clicks from weekly stats
+        total_weekly_clicks = sum(stat["clicks"] for stat in weekly_stats)
+
+        response_body = {
+            "short_id": short_id,
+            "short_url": link_info.get("short_url"),
+            "long_url": link_info.get("long_url"),
+            "created_at": link_info.get("created_at"),
+            "total_hits": link_info.get("hits", 0),
+            "weekly_stats": weekly_stats,
+            "total_weekly_clicks": total_weekly_clicks
+        }
+
+        return {
+            "statusCode": 200,
+            "headers": {
+                "Access-Control-Allow-Headers": "Content-Type,Authorization",
+                "Access-Control-Allow-Origin": cors,
+                "Access-Control-Allow-Methods": "OPTIONS,GET",
+            },
+            "body": json.dumps(response_body, default=decimal_to_number),
+        }
+
+    except ClientError as error:
+        logging.error("Error retrieving stats for short_id: %s, error: %s", short_id, error)
+        return {
+            "statusCode": 500,
+            "headers": {
+                "Access-Control-Allow-Headers": "Content-Type,Authorization",
+                "Access-Control-Allow-Origin": cors,
+                "Access-Control-Allow-Methods": "OPTIONS,GET",
+            },
+            "body": json.dumps({"error": "Internal server error"}),
+        }
+
+
 def retreiver(event, context):
     short_id = event.get("short_id")
     logging.info("long-url requested for short_id: %s", short_id)
@@ -227,6 +385,7 @@ def retreiver(event, context):
 
         if "Item" in item:
             long_url = item.get("Item").get("long_url")
+            ttl_value = item.get("Item").get("ttl", 0)
         else:
             return {
                 "statusCode": 301,
@@ -248,6 +407,10 @@ def retreiver(event, context):
             logging.error(
                 "Failed to increase the stats for: %s with: %s", short_id, error
             )
+
+        # Track weekly clicks with the same TTL as the link
+        track_click(short_id, ttl_value)
+
     except ClientError as err:
         long_url = fallback_url
         logging.error(

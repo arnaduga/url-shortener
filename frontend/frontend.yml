@@ -75,7 +75,7 @@ Resources:
             ResponsePagePath: "/403.html"
         Enabled: true
         HttpVersion: "http2"
-        DefaultRootObject: "index.htm"
+        DefaultRootObject: "index.html"
         IPV6Enabled: true
         Origins:
           - DomainName: !GetAtt S3StaticBucket.RegionalDomainName
@@ -138,8 +138,8 @@ Resources:
           ContentSecurityPolicy:
             ContentSecurityPolicy: !If
               - HasSubDomain
-              - !Sub "default-src 'none'; img-src 'self' https://lh3.googleusercontent.com; script-src 'self' https://accounts.google.com/gsi/client 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://accounts.google.com/gsi/style; object-src 'none'; font-src 'self' data:; connect-src 'self' https://${pSubDomain}.${pDomain}/ https://accounts.google.com; frame-src https://accounts.google.com"
-              - !Sub "default-src 'none'; img-src 'self' https://lh3.googleusercontent.com; script-src 'self' https://accounts.google.com/gsi/client 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://accounts.google.com/gsi/style; object-src 'none'; font-src 'self' data:; connect-src 'self' https://${pDomain}/ https://accounts.google.com; frame-src https://accounts.google.com"
+              - !Sub "default-src 'none'; img-src 'self' https://lh3.googleusercontent.com; script-src 'self' https://accounts.google.com/gsi/client https://cdn.jsdelivr.net 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://accounts.google.com/gsi/style; object-src 'none'; font-src 'self' data:; connect-src 'self' https://${pSubDomain}.${pDomain}/ https://accounts.google.com https://accounts.google.com/gsi/ https://cdn.jsdelivr.net; frame-src https://accounts.google.com https://accounts.google.com/gsi/"
+              - !Sub "default-src 'none'; img-src 'self' https://lh3.googleusercontent.com; script-src 'self' https://accounts.google.com/gsi/client https://cdn.jsdelivr.net 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://accounts.google.com/gsi/style; object-src 'none'; font-src 'self' data:; connect-src 'self' https://${pDomain}/ https://accounts.google.com https://accounts.google.com/gsi/ https://cdn.jsdelivr.net; frame-src https://accounts.google.com https://accounts.google.com/gsi/"
             Override: true
           ContentTypeOptions:
             Override: true
