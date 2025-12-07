@@ -16,6 +16,10 @@ Parameters:
     Type: String
   pMaxChar:
     Type: String
+  pCustomMinChar:
+    Type: String
+  pCustomMaxChar:
+    Type: String
   pDescription:
     Type: String
   pAlertsRecipient:
@@ -119,6 +123,8 @@ Resources:
           REGION: !Ref pAWSRegion
           MIN_CHAR: !Ref pMinChar
           MAX_CHAR: !Ref pMaxChar
+          CUSTOM_MIN_CHAR: !Ref pCustomMinChar
+          CUSTOM_MAX_CHAR: !Ref pCustomMaxChar
       Policies:
         - Version: "2012-10-17"
           Statement:
@@ -222,6 +228,70 @@ Resources:
                 contentHandling: "CONVERT_TO_TEXT"
                 type: "aws_proxy"
           /{shortid}:
+            options:
+              security: [] # Public endpoint - no authentication required
+              consumes:
+                - "application/json"
+              produces:
+                - "application/json"
+              parameters:
+                - name: "shortid"
+                  in: "path"
+                  required: true
+                  type: "string"
+              responses:
+                "200":
+                  description: "200 response for CORS preflight"
+                  schema:
+                    $ref: "#/definitions/Empty"
+                  headers:
+                    Access-Control-Allow-Origin:
+                      type: "string"
+                    Access-Control-Allow-Methods:
+                      type: "string"
+                    Access-Control-Allow-Headers:
+                      type: "string"
+              x-amazon-apigateway-integration:
+                responses:
+                  default:
+                    statusCode: "200"
+                    responseParameters:
+                      method.response.header.Access-Control-Allow-Methods: "'HEAD,GET,OPTIONS'"
+                      method.response.header.Access-Control-Allow-Headers: "'Content-Type,Origin'"
+                      method.response.header.Access-Control-Allow-Origin: "'*'"
+                requestTemplates:
+                  application/json: '{"statusCode": 200}'
+                passthroughBehavior: "when_no_match"
+                type: "mock"
+            head:
+              security: [] # Public endpoint - no authentication required
+              consumes:
+                - "application/json"
+              produces:
+                - "application/json"
+              parameters:
+                - name: "shortid"
+                  in: "path"
+                  required: true
+                  type: "string"
+              responses:
+                "200":
+                  description: "200 response - Short ID exists"
+                  schema:
+                    $ref: "#/definitions/Empty"
+                "404":
+                  description: "404 response - Short ID available"
+                  schema:
+                    $ref: "#/definitions/Empty"
+              x-amazon-apigateway-integration:
+                uri: !Sub "arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${ShortenerFunction.Arn}/invocations"
+                httpMethod: "POST"
+                responses:
+                  default:
+                    statusCode: "200"
+                passthroughBehavior: "when_no_match"
+                contentHandling: "CONVERT_TO_TEXT"
+                type: "aws_proxy"
             get:
               security: [] # Public endpoint - no authentication required
               consumes:

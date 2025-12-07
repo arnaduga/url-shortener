@@ -237,6 +237,10 @@ makefile.bck
 Makefile.local
 Makefile.*.bak
 
+# Quick deploy scripts
+deploy.sh
+deploy-frontend.sh
+
 # Python version
 .python-version
 

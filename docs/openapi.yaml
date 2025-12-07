@@ -1,0 +1,538 @@
+openapi: 3.0.3
+
+info:
+  title: URL Shortener API
+  version: 2.1.0
+  description: |
+    REST API for creating and managing shortened URLs with custom IDs, analytics tracking, and expiration management.
+
+    ## Features
+    - Generate random or human-readable short IDs
+    - Create custom short IDs (4-80 characters)
+    - Configure expiration (TTL) for links
+    - Track click statistics by week
+    - Google OAuth authentication for protected endpoints
+    - API key authentication support
+
+    ## Authentication
+    This API uses Google OAuth 2.0 with PKCE flow for web applications and API keys for programmatic access.
+    Protected endpoints require an `Authorization` header with a valid token.
+
+  contact:
+    name: API Support
+    email: arnaduga@gmail.com
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: https://zgurl.cc
+    description: Production server
+
+tags:
+  - name: URLs
+    description: Create and manage shortened URLs
+  - name: Analytics
+    description: View statistics and analytics
+  - name: Availability
+    description: Check short ID availability
+
+security:
+  - GoogleAuth: []
+  - ApiKeyAuth: []
+
+paths:
+  /create:
+    post:
+      tags:
+        - URLs
+      summary: Create a shortened URL
+      description: |
+        Creates a new shortened URL with optional custom ID, human-readable ID, or random ID.
+
+        **ID Generation Options:**
+        - **Random**: Randomly generated 3-4 character ID (default)
+        - **Human Readable**: Pronounceable syllable-based 3-4 character ID
+        - **Custom**: User-defined ID (4-80 characters, lowercase letters, numbers, hyphens, underscores, periods)
+
+        **Custom ID Rules:**
+        - Length: 4-80 characters
+        - Allowed characters: a-z (lowercase only), 0-9, hyphen (-), underscore (_), period (.)
+        - No consecutive special characters (e.g., `--`, `__`, `..`)
+        - Must start and end with alphanumeric character
+
+      operationId: createShortUrl
+      security:
+        - GoogleAuth: []
+        - ApiKeyAuth: []
+
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - long_url
+              properties:
+                long_url:
+                  type: string
+                  format: uri
+                  description: The original URL to shorten (must start with http:// or https://)
+                  example: "https://example.com/very/long/url/path"
+                  minLength: 1
+                  maxLength: 2048
+                custom_id:
+                  type: string
+                  description: Custom short ID (optional, 4-80 chars, lowercase a-z, 0-9, -, _, .)
+                  pattern: '^[a-z0-9]+([._-]?[a-z0-9]+)*$'
+                  minLength: 4
+                  maxLength: 80
+                  example: "my-custom-link"
+                human_readable:
+                  type: boolean
+                  description: Generate a human-readable (pronounceable) ID instead of random
+                  default: false
+                  example: true
+                ttl_in_days:
+                  type: integer
+                  description: Time-to-live in days (0 = never expires, negative = 100 years)
+                  minimum: -1
+                  maximum: 36500
+                  default: 7
+                  example: 30
+            examples:
+              random:
+                summary: Random short ID
+                value:
+                  long_url: "https://example.com/page"
+                  ttl_in_days: 7
+              humanReadable:
+                summary: Human-readable short ID
+                value:
+                  long_url: "https://example.com/page"
+                  human_readable: true
+                  ttl_in_days: 30
+              custom:
+                summary: Custom short ID
+                value:
+                  long_url: "https://example.com/page"
+                  custom_id: "my-link-2024"
+                  ttl_in_days: 0
+
+      responses:
+        '200':
+          description: Short URL created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShortUrlResponse'
+              examples:
+                success:
+                  value:
+                    short_id: "abc123"
+                    short_url: "https://zgurl.cc/abc123"
+                    long_url: "https://example.com/very/long/url/path"
+                    created_at: "2025-12-07T14:30:00"
+                    ttl: 1733673000
+        '400':
+          description: Bad request - Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                invalidCustomId:
+                  summary: Invalid custom ID format
+                  value:
+                    message: "Custom ID can only contain letters, numbers, and single hyphens (-), underscores (_), or periods (.) between alphanumeric characters"
+                customIdTooShort:
+                  summary: Custom ID too short
+                  value:
+                    message: "Custom ID must be between 4 and 80 characters"
+                    min_length: 4
+                    max_length: 80
+        '409':
+          description: Conflict - Custom ID already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                message: "Custom ID already exists"
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                emptyUrl:
+                  summary: Empty URL field
+                  value:
+                    message: "Empty url field"
+                malformedUrl:
+                  summary: Malformed URL
+                  value:
+                    message: "Malformed URL"
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+
+  /{shortid}:
+    parameters:
+      - name: shortid
+        in: path
+        required: true
+        description: The short ID to access
+        schema:
+          type: string
+          pattern: '^[a-z0-9._-]+$'
+          minLength: 3
+          maxLength: 80
+          example: "abc123"
+
+    head:
+      tags:
+        - Availability
+      summary: Check if a short ID exists
+      description: |
+        Check the availability of a short ID without following the redirect.
+        Returns 200 if the ID exists (already taken), 404 if available.
+
+        This endpoint is useful for:
+        - Validating custom IDs before creation
+        - Checking if a short URL is still active
+        - Verifying link existence without incrementing click counters
+
+      operationId: checkShortIdExists
+      security: []  # Public endpoint
+
+      responses:
+        '200':
+          description: Short ID exists (already taken)
+          headers:
+            Access-Control-Allow-Origin:
+              schema:
+                type: string
+                example: "*"
+        '404':
+          description: Short ID is available (doesn't exist)
+          headers:
+            Access-Control-Allow-Origin:
+              schema:
+                type: string
+                example: "*"
+        '400':
+          description: Bad request - Missing short_id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    get:
+      tags:
+        - URLs
+      summary: Redirect to original URL
+      description: |
+        Redirects to the original long URL associated with the short ID.
+        This endpoint also:
+        - Increments the total hit counter
+        - Records weekly click statistics
+        - Tracks analytics data (user agent, source IP, etc.)
+
+        If the short ID doesn't exist, redirects to the configured fallback URL.
+
+      operationId: redirectToLongUrl
+      security: []  # Public endpoint
+
+      responses:
+        '301':
+          description: Permanent redirect to the original URL
+          headers:
+            Location:
+              description: The original long URL
+              schema:
+                type: string
+                format: uri
+                example: "https://example.com/original/page"
+        '404':
+          description: Short ID not found - redirects to fallback URL
+          headers:
+            Location:
+              description: Fallback URL
+              schema:
+                type: string
+                format: uri
+                example: "https://short.zgurl.cc"
+
+  /stats/{shortid}:
+    parameters:
+      - name: shortid
+        in: path
+        required: true
+        description: The short ID to get statistics for
+        schema:
+          type: string
+          pattern: '^[a-z0-9._-]+$'
+          minLength: 3
+          maxLength: 80
+          example: "abc123"
+
+    get:
+      tags:
+        - Analytics
+      summary: Get statistics for a short URL
+      description: |
+        Retrieves detailed statistics for a shortened URL, including:
+        - Total hits (all-time click count)
+        - Weekly click statistics (broken down by ISO week)
+        - Link metadata (creation date, expiration, original URL)
+
+        **Note:** Weekly stats are stored with the same TTL as the link itself.
+
+      operationId: getShortUrlStats
+      security:
+        - GoogleAuth: []
+        - ApiKeyAuth: []
+
+      responses:
+        '200':
+          description: Statistics retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatsResponse'
+              example:
+                short_id: "abc123"
+                short_url: "https://zgurl.cc/abc123"
+                long_url: "https://example.com/page"
+                created_at: "2025-12-07T14:30:00"
+                total_hits: 142
+                weekly_stats:
+                  - week: "2025-W50"
+                    clicks: 87
+                  - week: "2025-W49"
+                    clicks: 55
+                total_weekly_clicks: 142
+        '404':
+          description: Short link not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: "Short link not found"
+        '400':
+          description: Bad request - Missing short_id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: "Missing short_id"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: "Internal server error"
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+
+components:
+  securitySchemes:
+    GoogleAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        Google OAuth 2.0 token obtained via PKCE flow.
+        The token should be sent in the Authorization header as a Bearer token.
+
+        **Example:** `Authorization: Bearer ya29.a0AfH6SMBx...`
+
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: |
+        API key for programmatic access. Contact the administrator to obtain an API key.
+        API keys are hashed and stored securely in DynamoDB.
+
+  schemas:
+    ShortUrlResponse:
+      type: object
+      required:
+        - short_id
+        - short_url
+        - long_url
+        - created_at
+        - ttl
+      properties:
+        short_id:
+          type: string
+          description: The generated or custom short ID
+          example: "abc123"
+        short_url:
+          type: string
+          format: uri
+          description: The complete short URL
+          example: "https://zgurl.cc/abc123"
+        long_url:
+          type: string
+          format: uri
+          description: The original long URL
+          example: "https://example.com/very/long/url/path"
+        created_at:
+          type: string
+          format: date-time
+          description: ISO 8601 timestamp of creation
+          example: "2025-12-07T14:30:00"
+        ttl:
+          type: integer
+          description: Unix timestamp when the link expires (0 means never)
+          example: 1733673000
+
+    StatsResponse:
+      type: object
+      required:
+        - short_id
+        - short_url
+        - long_url
+        - created_at
+        - total_hits
+        - weekly_stats
+        - total_weekly_clicks
+      properties:
+        short_id:
+          type: string
+          description: The short ID
+          example: "abc123"
+        short_url:
+          type: string
+          format: uri
+          description: The complete short URL
+          example: "https://zgurl.cc/abc123"
+        long_url:
+          type: string
+          format: uri
+          description: The original long URL
+          example: "https://example.com/page"
+        created_at:
+          type: string
+          format: date-time
+          description: ISO 8601 timestamp of creation
+          example: "2025-12-07T14:30:00"
+        total_hits:
+          type: integer
+          description: Total number of clicks (all-time)
+          example: 142
+        weekly_stats:
+          type: array
+          description: Click statistics broken down by ISO week (most recent first)
+          items:
+            type: object
+            required:
+              - week
+              - clicks
+            properties:
+              week:
+                type: string
+                description: ISO week in format YYYY-WNN
+                pattern: '^\d{4}-W\d{2}$'
+                example: "2025-W50"
+              clicks:
+                type: integer
+                description: Number of clicks in this week
+                minimum: 0
+                example: 87
+        total_weekly_clicks:
+          type: integer
+          description: Sum of all weekly clicks (should match total_hits)
+          example: 142
+
+    Error:
+      type: object
+      required:
+        - message
+      properties:
+        message:
+          type: string
+          description: Human-readable error message
+          example: "Invalid custom ID format"
+        error:
+          type: string
+          description: Error type or code
+          example: "400 Bad Request"
+        min_length:
+          type: integer
+          description: Minimum length for custom IDs (when applicable)
+          example: 4
+        max_length:
+          type: integer
+          description: Maximum length for custom IDs (when applicable)
+          example: 80
+
+  responses:
+    UnauthorizedError:
+      description: Authentication required - No valid token provided
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            message: "Unauthorized - Authentication required"
+            error: "401 Unauthorized"
+
+    ForbiddenError:
+      description: Access denied - User not authorized
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            message: "Access denied - You are not authorized to use this service"
+            error: "403 Forbidden"
+
+  examples:
+    RandomShortUrl:
+      summary: Random short URL
+      value:
+        short_id: "xyz"
+        short_url: "https://zgurl.cc/xyz"
+        long_url: "https://example.com/page"
+        created_at: "2025-12-07T14:30:00"
+        ttl: 1733673000
+
+    HumanReadableShortUrl:
+      summary: Human-readable short URL
+      value:
+        short_id: "pato"
+        short_url: "https://zgurl.cc/pato"
+        long_url: "https://example.com/page"
+        created_at: "2025-12-07T14:30:00"
+        ttl: 1733673000
+
+    CustomShortUrl:
+      summary: Custom short URL
+      value:
+        short_id: "my-link-2024"
+        short_url: "https://zgurl.cc/my-link-2024"
+        long_url: "https://example.com/page"
+        created_at: "2025-12-07T14:30:00"
+        ttl: 0
+
+# Webhooks are not used in this API
+webhooks: {}

@@ -20,6 +20,12 @@ export default defineConfig({
         target: 'https://zgurl.cc',
         changeOrigin: true,
         secure: true,
+      },
+      // Proxy for checking short IDs (OPTIONS requests)
+      '^/[a-zA-Z0-9-_]+$': {
+        target: 'https://zgurl.cc',
+        changeOrigin: true,
+        secure: true,
       }
     }
   }

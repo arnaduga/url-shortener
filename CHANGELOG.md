@@ -10,6 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Possibility to use the API without front (apikey, hashed-stored in DDB, created via script)
+- Custom ID in API! Now, you can request for a specific short ID
+- Open API Specifications added
+
+### Fixed
+
+- Documentation improvements
 
 ## [v2.0.0] 2025-12-03
 

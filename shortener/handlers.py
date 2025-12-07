@@ -11,6 +11,7 @@ from urllib import parse
 import logging
 import validators
 import math
+import re
 
 # Logging configuration
 root = logging.getLogger()
@@ -31,12 +32,21 @@ table_name = os.getenv("TABLE_NAME")
 clicks_stats_table_name = os.getenv("CLICKS_STATS_TABLE")
 min_char = int(os.getenv("MIN_CHAR"))
 max_char = int(os.getenv("MAX_CHAR"))
+custom_min_char = int(os.getenv("CUSTOM_MIN_CHAR"))
+custom_max_char = int(os.getenv("CUSTOM_MAX_CHAR"))
 string_format = ascii_letters + digits
+
+# Custom ID validation regex: a-z (lowercase only), 0-9, -, _, .
+# Does NOT allow consecutive special characters (__, --, .., or combinations)
+# Does NOT allow uppercase letters
+# Must start and end with alphanumeric
+CUSTOM_ID_REGEX = re.compile(r'^[a-z0-9]+([._-]?[a-z0-9]+)*$')
 
 # CORS configuration
 website_url = "https://short." + domain
 api_endpoint = "https://" + api_domain
-allowed_origins = [api_endpoint, website_url]
+# Allow localhost for development
+allowed_origins = [api_endpoint, website_url, "http://localhost:5173", "http://localhost:3000"]
 
 ddb = boto3.resource("dynamodb", region_name=aws_region).Table(table_name)
 clicks_stats_ddb = boto3.resource("dynamodb", region_name=aws_region).Table(clicks_stats_table_name)
@@ -176,6 +186,64 @@ def generate_id( human_readble = False ):
     return short_id    
 
 
+def check_shortid_exists(event, context):
+    """
+    Handler for HEAD /{shortid} endpoint
+    Returns 200 if the short ID exists, 404 if not
+    This is a public endpoint, so we allow all origins (*)
+    """
+    # Extract short_id from path
+    path = event.get("path", "").strip("/")
+    short_id = path
+
+    if not short_id:
+        return {
+            "statusCode": 400,
+            "headers": {
+                "Access-Control-Allow-Headers": "Content-Type",
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "OPTIONS,GET",
+            },
+            "body": json.dumps({"message": "Missing short_id"}),
+        }
+
+    try:
+        response = ddb.get_item(Key={"short_id": short_id})
+        if "Item" in response:
+            # Short ID exists
+            return {
+                "statusCode": 200,
+                "headers": {
+                    "Access-Control-Allow-Headers": "Content-Type",
+                    "Access-Control-Allow-Origin": "*",
+                    "Access-Control-Allow-Methods": "OPTIONS,GET",
+                },
+                "body": json.dumps({"exists": True}),
+            }
+        else:
+            # Short ID doesn't exist
+            return {
+                "statusCode": 404,
+                "headers": {
+                    "Access-Control-Allow-Headers": "Content-Type",
+                    "Access-Control-Allow-Origin": "*",
+                    "Access-Control-Allow-Methods": "OPTIONS,GET",
+                },
+                "body": json.dumps({"exists": False}),
+            }
+    except ClientError as error:
+        logging.error("Error checking short_id existence: %s, error: %s", short_id, error)
+        return {
+            "statusCode": 500,
+            "headers": {
+                "Access-Control-Allow-Headers": "Content-Type",
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "OPTIONS,GET",
+            },
+            "body": json.dumps({"error": "Internal server error"}),
+        }
+
+
 def main(event, context):
     logging.info("===> Event: %s", event)
     if "short_id" in event:
@@ -186,6 +254,9 @@ def main(event, context):
             answer = create(event, context)
         elif "/stats/" in event["path"] and event["httpMethod"] == "GET":
             answer = stats_handler(event, context)
+        elif event["httpMethod"] == "HEAD" and event["path"] != "/create" and "/stats/" not in event["path"]:
+            # Handle HEAD for /{shortid} endpoint
+            answer = check_shortid_exists(event, context)
         else:
             cors = cors_setup(event)
             answer = {
@@ -203,9 +274,10 @@ def main(event, context):
 
 def create(event, context):
     analytics = {}
+    body_data = json.loads(event.get("body"))
 
     # Handle empty long_url
-    if not json.loads(event.get("body")).get("long_url"):
+    if not body_data.get("long_url"):
         cors = cors_setup(event)
         return {
             "statusCode": 500,
@@ -218,8 +290,8 @@ def create(event, context):
         }
     else:
         # Handle wrong url
-        if validators.url(json.loads(event.get("body")).get("long_url")):
-            long_url = json.loads(event.get("body")).get("long_url")
+        if validators.url(body_data.get("long_url")):
+            long_url = body_data.get("long_url")
         else:
             cors = cors_setup(event)
             return {
@@ -232,10 +304,60 @@ def create(event, context):
                 "body": json.dumps({"message": "Malformed URL"}),
             }
 
-    if not json.loads(event.get("body")).get("human_readable"):
-        short_id = generate_id(False)
-    else:
+    # Check if user provided a custom_id
+    custom_id = body_data.get("custom_id")
+    if custom_id:
+        # Validate custom_id characters (only a-z, 0-9, -, _)
+        if not CUSTOM_ID_REGEX.match(custom_id):
+            cors = cors_setup(event)
+            return {
+                "statusCode": 400,
+                "headers": {
+                    "Access-Control-Allow-Headers": "Content-Type",
+                    "Access-Control-Allow-Origin": cors,
+                    "Access-Control-Allow-Methods": "OPTIONS,POST,GET",
+                },
+                "body": json.dumps({
+                    "message": "Custom ID can only contain letters, numbers, and single hyphens (-), underscores (_), or periods (.) between alphanumeric characters"
+                }),
+            }
+
+        # Validate custom_id length
+        if len(custom_id) < custom_min_char or len(custom_id) > custom_max_char:
+            cors = cors_setup(event)
+            return {
+                "statusCode": 400,
+                "headers": {
+                    "Access-Control-Allow-Headers": "Content-Type",
+                    "Access-Control-Allow-Origin": cors,
+                    "Access-Control-Allow-Methods": "OPTIONS,POST,GET",
+                },
+                "body": json.dumps({
+                    "message": f"Custom ID must be between {custom_min_char} and {custom_max_char} characters",
+                    "min_length": custom_min_char,
+                    "max_length": custom_max_char
+                }),
+            }
+
+        # Check if custom_id already exists
+        if not check_id(custom_id):
+            cors = cors_setup(event)
+            return {
+                "statusCode": 409,
+                "headers": {
+                    "Access-Control-Allow-Headers": "Content-Type",
+                    "Access-Control-Allow-Origin": cors,
+                    "Access-Control-Allow-Methods": "OPTIONS,POST,GET",
+                },
+                "body": json.dumps({"message": "Custom ID already exists"}),
+            }
+
+        short_id = custom_id
+    elif body_data.get("human_readable"):
         short_id = generate_id(True)
+    else:
+        short_id = generate_id(False)
+
     short_url = "https://" + api_domain + "/" + short_id
 
 

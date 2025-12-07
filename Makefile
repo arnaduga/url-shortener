@@ -28,6 +28,10 @@ Description := ${Product} - ${Project} - ${Environment}
 MinChar := 3
 MaxChar := 3
 
+# Custom ID Configuration (user-chosen short IDs)
+CustomMinChar := 4
+CustomMaxChar := 20
+
 # DNS
 Domain := <REPLACE_ME>
 SubDomain :=
@@ -79,6 +83,8 @@ deploy: build
 			pAWSRegion=${AWSRegion} \
 			pMinChar=${MinChar} \
 			pMaxChar=${MaxChar} \
+			pCustomMinChar=${CustomMinChar} \
+			pCustomMaxChar=${CustomMaxChar} \
 			pProjectName=${Project} \
 			pProductName=${Product} \
 			pDescription='${Description}' \

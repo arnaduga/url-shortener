@@ -21,6 +21,12 @@ Parameters:
   pMaxChar:
     Type: String
     Description: Maximum number of character for the random string
+  pCustomMinChar:
+    Type: String
+    Description: Minimum number of character for custom ID
+  pCustomMaxChar:
+    Type: String
+    Description: Maximum number of character for custom ID
   pDescription:
     Type: String
     Description: Project description
@@ -69,6 +75,8 @@ Resources:
         pProductName: !Ref pProductName
         pMinChar: !Ref pMinChar
         pMaxChar: !Ref pMaxChar
+        pCustomMinChar: !Ref pCustomMinChar
+        pCustomMaxChar: !Ref pCustomMaxChar
         pDescription: !Ref pDescription
         pAlertsRecipient: !Ref pAlertsRecipient
         pCertificateArn: !Ref pCertificateArn
