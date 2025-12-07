@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Transform: "AWS::Serverless-2016-10-31"
-Description: zoph.io - url-shortener - https://zoph.io - December 2022
+Description: url-shortener
 ###########################################################
 Parameters:
   ###########################################################
@@ -15,6 +15,10 @@ Parameters:
   pMinChar:
     Type: String
   pMaxChar:
+    Type: String
+  pCustomMinChar:
+    Type: String
+  pCustomMaxChar:
     Type: String
   pDescription:
     Type: String
@@ -58,6 +62,7 @@ Resources:
       Environment:
         Variables:
           AUTH_USERS_TABLE: !Sub "${pProductName}-${pProjectName}-auth-users-${pEnv}"
+          API_KEYS_TABLE: !Sub "${pProductName}-${pProjectName}-api-keys-${pEnv}"
           GOOGLE_CLIENT_ID: !Ref pGoogleClientId
       Policies:
         - Version: "2012-10-17"
@@ -67,6 +72,11 @@ Resources:
                 - dynamodb:GetItem
                 - dynamodb:UpdateItem
               Resource: !GetAtt AuthUsersTable.Arn
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:UpdateItem
+              Resource: !GetAtt ApiKeysTable.Arn
       Tags:
         Project: !Ref pProjectName
         Product: !Ref pProductName
@@ -113,6 +123,8 @@ Resources:
           REGION: !Ref pAWSRegion
           MIN_CHAR: !Ref pMinChar
           MAX_CHAR: !Ref pMaxChar
+          CUSTOM_MIN_CHAR: !Ref pCustomMinChar
+          CUSTOM_MAX_CHAR: !Ref pCustomMaxChar
       Policies:
         - Version: "2012-10-17"
           Statement:
@@ -216,8 +228,72 @@ Resources:
                 contentHandling: "CONVERT_TO_TEXT"
                 type: "aws_proxy"
           /{shortid}:
+            options:
+              security: [] # Public endpoint - no authentication required
+              consumes:
+                - "application/json"
+              produces:
+                - "application/json"
+              parameters:
+                - name: "shortid"
+                  in: "path"
+                  required: true
+                  type: "string"
+              responses:
+                "200":
+                  description: "200 response for CORS preflight"
+                  schema:
+                    $ref: "#/definitions/Empty"
+                  headers:
+                    Access-Control-Allow-Origin:
+                      type: "string"
+                    Access-Control-Allow-Methods:
+                      type: "string"
+                    Access-Control-Allow-Headers:
+                      type: "string"
+              x-amazon-apigateway-integration:
+                responses:
+                  default:
+                    statusCode: "200"
+                    responseParameters:
+                      method.response.header.Access-Control-Allow-Methods: "'HEAD,GET,OPTIONS'"
+                      method.response.header.Access-Control-Allow-Headers: "'Content-Type,Origin'"
+                      method.response.header.Access-Control-Allow-Origin: "'*'"
+                requestTemplates:
+                  application/json: '{"statusCode": 200}'
+                passthroughBehavior: "when_no_match"
+                type: "mock"
+            head:
+              security: [] # Public endpoint - no authentication required
+              consumes:
+                - "application/json"
+              produces:
+                - "application/json"
+              parameters:
+                - name: "shortid"
+                  in: "path"
+                  required: true
+                  type: "string"
+              responses:
+                "200":
+                  description: "200 response - Short ID exists"
+                  schema:
+                    $ref: "#/definitions/Empty"
+                "404":
+                  description: "404 response - Short ID available"
+                  schema:
+                    $ref: "#/definitions/Empty"
+              x-amazon-apigateway-integration:
+                uri: !Sub "arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${ShortenerFunction.Arn}/invocations"
+                httpMethod: "POST"
+                responses:
+                  default:
+                    statusCode: "200"
+                passthroughBehavior: "when_no_match"
+                contentHandling: "CONVERT_TO_TEXT"
+                type: "aws_proxy"
             get:
-              security: []  # Public endpoint - no authentication required
+              security: [] # Public endpoint - no authentication required
               consumes:
                 - "application/json"
               parameters:
@@ -385,6 +461,25 @@ Resources:
       PointInTimeRecoverySpecification:
         PointInTimeRecoveryEnabled: true
       TableName: !Sub "${pProductName}-${pProjectName}-auth-users-${pEnv}"
+      Tags:
+        - Key: Project
+          Value: !Ref pProjectName
+        - Key: Product
+          Value: !Ref pProductName
+
+  ApiKeysTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      AttributeDefinitions:
+        - AttributeName: key_hash
+          AttributeType: S
+      KeySchema:
+        - AttributeName: key_hash
+          KeyType: HASH
+      BillingMode: PAY_PER_REQUEST
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      TableName: !Sub "${pProductName}-${pProjectName}-api-keys-${pEnv}"
       Tags:
         - Key: Project
           Value: !Ref pProjectName

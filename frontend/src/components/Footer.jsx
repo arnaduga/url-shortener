@@ -1,10 +1,14 @@
 import { Box, Container, Text, HStack, VStack, Link, Tooltip, useBreakpointValue } from '@chakra-ui/react';
 import { useState } from 'react';
 import { AboutModal } from './AboutModal';
+import aboutData from '../about.json';
 
 export const Footer = () => {
   const [isAboutOpen, setIsAboutOpen] = useState(false);
   const isMobile = useBreakpointValue({ base: true, md: false });
+
+  // Get the latest version from about.json
+  const currentVersion = aboutData.versions?.[0]?.version;
 
   return (
     <>
@@ -30,7 +34,7 @@ export const Footer = () => {
                   cursor="pointer"
                   onClick={() => setIsAboutOpen(true)}
                 >
-                  About
+                  {currentVersion ? `About ${currentVersion}` : 'About'}
                 </Link>
               </HStack>
               <HStack spacing={1}>
@@ -54,7 +58,7 @@ export const Footer = () => {
                 cursor="pointer"
                 onClick={() => setIsAboutOpen(true)}
               >
-                About
+                {currentVersion ? `About ${currentVersion}` : 'About'}
               </Link>
               <Text>•</Text>
               <Text>Made with</Text>

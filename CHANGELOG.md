@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v2.1.0] 2025-12-07
+
+### Added
+
+- Possibility to use the API without front (apikey, hashed-stored in DDB, created via script)
+- Custom ID in API! Now, you can request for a specific short ID
+- Open API Specifications added
+
+### Fixed
+
+- Documentation improvements
+
 ## [v2.0.0] 2025-12-03
 
 ### Added

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Box,
   VStack,
@@ -32,19 +32,59 @@ import {
   Heading,
   Collapse,
   SimpleGrid,
+  Radio,
+  RadioGroup,
+  Stack,
+  FormHelperText,
+  Spinner,
 } from '@chakra-ui/react';
-import { FiCopy, FiExternalLink, FiAlertCircle, FiChevronDown, FiChevronUp, FiSliders } from 'react-icons/fi';
+import { FiCopy, FiExternalLink, FiAlertCircle, FiChevronDown, FiChevronUp, FiSliders, FiCheck, FiX } from 'react-icons/fi';
 import { useApi } from '../hooks/useApi';
+import { API_ENDPOINT } from '../config';
+
+// Custom ID validation messages and regex
+// Allows: a-z (lowercase only), 0-9, -, _, .
+// Does NOT allow: consecutive special characters (__, --, .., or combinations)
+// Does NOT allow: uppercase letters
+const CUSTOM_ID_REGEX = /^[a-z0-9]+([._-]?[a-z0-9]+)*$/;
+// Regex for input validation (allows partial input while typing, including one trailing special char)
+const CUSTOM_ID_INPUT_REGEX = /^[a-z0-9]+([._-]?[a-z0-9]+)*[._-]?$/;
+const CUSTOM_ID_MESSAGES = {
+  ALREADY_TAKEN: {
+    title: 'Custom ID Already Taken',
+    description: (id) => `"${id}" is already in use. Please choose a different ID.`,
+  },
+  AVAILABLE: {
+    title: 'Custom ID Available',
+    description: (id) => `"${id}" is available!`,
+  },
+  INVALID_LENGTH: {
+    title: 'Invalid Custom ID',
+    description: 'Custom ID must be between 4 and 80 characters',
+  },
+  INVALID_CHARACTERS: {
+    title: 'Invalid Characters',
+    description: 'Custom ID can only contain letters, numbers, and single hyphens (-), underscores (_), or periods (.) between alphanumeric characters',
+  },
+  REQUIRED: {
+    title: 'Error',
+    description: 'Please enter a custom ID',
+  },
+};
 
 export const UrlShortenerForm = () => {
   const { apiCall } = useApi();
   const [longUrl, setLongUrl] = useState('');
-  const [humanReadable, setHumanReadable] = useState(true);
+  const [idType, setIdType] = useState('human_readable'); // 'random', 'human_readable', or 'custom'
+  const [customId, setCustomId] = useState('');
+  const [isCheckingAvailability, setIsCheckingAvailability] = useState(false);
+  const [customIdAvailable, setCustomIdAvailable] = useState(null);
   const [ttl, setTtl] = useState(7);
   const [isLoading, setIsLoading] = useState(false);
   const [shortUrl, setShortUrl] = useState('');
   const [errorDetails, setErrorDetails] = useState(null);
   const [showSettings, setShowSettings] = useState(false);
+  const checkingRef = useRef(false);
   const toast = useToast();
   const { isOpen, onOpen, onClose } = useDisclosure();
 
@@ -55,6 +95,79 @@ export const UrlShortenerForm = () => {
       return urlPattern.test(url);
     } catch (error) {
       return false;
+    }
+  };
+
+  // Check custom ID availability (only called manually)
+  const checkCustomIdAvailability = async () => {
+    const id = customId.trim();
+
+    if (!id || id.length < 4 || id.length > 80) {
+      setCustomIdAvailable(null);
+      return;
+    }
+
+    // Don't check if already checking
+    if (checkingRef.current) {
+      return;
+    }
+
+    checkingRef.current = true;
+    setIsCheckingAvailability(true);
+
+    try {
+      // Check availability using HEAD method
+      // Backend returns 200 if exists, 404 if not
+      const apiUrl = API_ENDPOINT || window.location.origin;
+      const url = `${apiUrl}/${id}`;
+
+      console.log('Checking availability at:', url);
+
+      const response = await fetch(url, {
+        method: 'HEAD',
+      });
+
+      console.log('Check availability - Response status:', response.status);
+
+      if (response.status === 200) {
+        // ID exists - not available
+        setCustomIdAvailable(false);
+        toast({
+          title: CUSTOM_ID_MESSAGES.ALREADY_TAKEN.title,
+          description: CUSTOM_ID_MESSAGES.ALREADY_TAKEN.description(id),
+          status: 'error',
+          duration: 4000,
+          isClosable: true,
+        });
+      } else if (response.status === 404) {
+        // ID doesn't exist - available
+        setCustomIdAvailable(true);
+        toast({
+          title: CUSTOM_ID_MESSAGES.AVAILABLE.title,
+          description: CUSTOM_ID_MESSAGES.AVAILABLE.description(id),
+          status: 'success',
+          duration: 3000,
+          isClosable: true,
+        });
+      } else {
+        // Unknown status (including 403, 400, 500)
+        console.warn('Unexpected status code:', response.status);
+        setCustomIdAvailable(null);
+        toast({
+          title: 'Unable to Check',
+          description: `Could not verify availability (status: ${response.status}). Please try creating the link directly.`,
+          status: 'warning',
+          duration: 4000,
+          isClosable: true,
+        });
+      }
+    } catch (error) {
+      console.error('Error checking custom ID availability:', error);
+      // On error, assume unavailable to be safe
+      setCustomIdAvailable(null);
+    } finally {
+      checkingRef.current = false;
+      setIsCheckingAvailability(false);
     }
   };
 
@@ -85,17 +198,73 @@ export const UrlShortenerForm = () => {
       return;
     }
 
+    // Validate custom ID if selected
+    if (idType === 'custom') {
+      if (!customId.trim()) {
+        toast({
+          title: CUSTOM_ID_MESSAGES.REQUIRED.title,
+          description: CUSTOM_ID_MESSAGES.REQUIRED.description,
+          status: 'error',
+          duration: 3000,
+          isClosable: true,
+        });
+        return;
+      }
+
+      if (!CUSTOM_ID_REGEX.test(customId)) {
+        toast({
+          title: CUSTOM_ID_MESSAGES.INVALID_CHARACTERS.title,
+          description: CUSTOM_ID_MESSAGES.INVALID_CHARACTERS.description,
+          status: 'error',
+          duration: 4000,
+          isClosable: true,
+        });
+        return;
+      }
+
+      if (customId.length < 4 || customId.length > 80) {
+        toast({
+          title: CUSTOM_ID_MESSAGES.INVALID_LENGTH.title,
+          description: CUSTOM_ID_MESSAGES.INVALID_LENGTH.description,
+          status: 'error',
+          duration: 3000,
+          isClosable: true,
+        });
+        return;
+      }
+
+      if (customIdAvailable === false) {
+        toast({
+          title: CUSTOM_ID_MESSAGES.ALREADY_TAKEN.title,
+          description: CUSTOM_ID_MESSAGES.ALREADY_TAKEN.description(customId.trim()),
+          status: 'error',
+          duration: 3000,
+          isClosable: true,
+        });
+        return;
+      }
+    }
+
     setIsLoading(true);
     setShortUrl('');
 
     try {
+      const requestBody = {
+        long_url: longUrl,
+        ttl_in_days: ttl,
+      };
+
+      // Add the appropriate ID type parameter
+      if (idType === 'custom') {
+        requestBody.custom_id = customId;
+      } else if (idType === 'human_readable') {
+        requestBody.human_readable = true;
+      }
+      // For 'random', we don't send any additional parameter
+
       const response = await apiCall('/create', {
         method: 'POST',
-        body: JSON.stringify({
-          long_url: longUrl,
-          human_readable: humanReadable,
-          ttl_in_days: ttl,
-        }),
+        body: JSON.stringify(requestBody),
       });
 
       if (!response.ok) {
@@ -131,7 +300,9 @@ export const UrlShortenerForm = () => {
 
       // Reset form
       setLongUrl('');
-      setHumanReadable(true);
+      setIdType('human_readable');
+      setCustomId('');
+      setCustomIdAvailable(null);
       setTtl(7);
     } catch (error) {
       const errorInfo = {
@@ -230,15 +401,88 @@ export const UrlShortenerForm = () => {
                 borderWidth="1px"
                 borderColor="gray.600"
               >
-                <SimpleGrid columns={{ base: 1, md: 2 }} spacing={6}>
-                  <HStack spacing={3} justify="flex-start">
-                    <FormLabel mb="0" minW="fit-content">Human Readable</FormLabel>
-                    <Switch
-                      colorScheme="blue"
-                      isChecked={humanReadable}
-                      onChange={(e) => setHumanReadable(e.target.checked)}
-                    />
-                  </HStack>
+                <VStack spacing={6} align="stretch">
+                  <FormControl>
+                    <FormLabel mb={3}>Short ID Type</FormLabel>
+                    <RadioGroup value={idType} onChange={setIdType}>
+                      <Stack spacing={3}>
+                        <Radio value="random" colorScheme="blue">
+                          <VStack align="start" spacing={0}>
+                            <Text>Random</Text>
+                            <Text fontSize="xs" color="gray.400">Randomly generated ID (3-4 chars)</Text>
+                          </VStack>
+                        </Radio>
+                        <Radio value="human_readable" colorScheme="blue">
+                          <VStack align="start" spacing={0}>
+                            <Text>Human Readable</Text>
+                            <Text fontSize="xs" color="gray.400">Pronounceable syllable-based ID (3-4 chars)</Text>
+                          </VStack>
+                        </Radio>
+                        <Box>
+                          <Stack direction={{ base: 'column', md: 'row' }} align={{ base: 'stretch', md: 'start' }} spacing={4}>
+                            <Radio value="custom" colorScheme="blue">
+                              <VStack align="start" spacing={0}>
+                                <Text>Custom ID</Text>
+                                <Text fontSize="xs" color="gray.400">Choose your own ID (4-80 chars)</Text>
+                              </VStack>
+                            </Radio>
+                            {idType === 'custom' && (
+                              <Box flex="1" minW={{ base: 'auto', md: '200px' }} w={{ base: 'full', md: 'auto' }}>
+                                <HStack spacing={2}>
+                                  <InputGroup size="sm">
+                                    <Input
+                                      placeholder="my-custom-link"
+                                      value={customId}
+                                      onChange={(e) => {
+                                        const value = e.target.value;
+                                        // Only allow valid characters (less strict for input)
+                                        if (value === '' || CUSTOM_ID_INPUT_REGEX.test(value)) {
+                                          setCustomId(value);
+                                          setCustomIdAvailable(null); // Reset availability when typing
+                                        }
+                                      }}
+                                      bg="gray.600"
+                                      border="none"
+                                      _focus={{ bg: 'gray.600', ring: 2, ringColor: 'blue.500' }}
+                                      pr="40px"
+                                    />
+                                    <InputRightElement>
+                                      {isCheckingAvailability && <Spinner size="sm" color="blue.500" />}
+                                      {!isCheckingAvailability && customIdAvailable === true && (
+                                        <Tooltip label="Available">
+                                          <Box as={FiCheck} color="green.400" />
+                                        </Tooltip>
+                                      )}
+                                      {!isCheckingAvailability && customIdAvailable === false && (
+                                        <Tooltip label="Already taken">
+                                          <Box as={FiX} color="red.400" />
+                                        </Tooltip>
+                                      )}
+                                    </InputRightElement>
+                                  </InputGroup>
+                                  <Button
+                                    size="sm"
+                                    onClick={checkCustomIdAvailability}
+                                    isLoading={isCheckingAvailability}
+                                    isDisabled={!customId || customId.trim().length < 4 || customId.length > 80}
+                                    colorScheme="blue"
+                                    variant="outline"
+                                  >
+                                    Check
+                                  </Button>
+                                </HStack>
+                                {customId.length > 0 && (
+                                  <Text fontSize="xs" color={customId.length < 4 || customId.length > 80 ? 'red.400' : 'gray.400'} mt={1}>
+                                    {customId.length} / 80 characters (min: 4)
+                                  </Text>
+                                )}
+                              </Box>
+                            )}
+                          </Stack>
+                        </Box>
+                      </Stack>
+                    </RadioGroup>
+                  </FormControl>
 
                   <FormControl>
                     <FormLabel mb={2} fontSize="sm">Expiration (days)</FormLabel>
@@ -263,7 +507,7 @@ export const UrlShortenerForm = () => {
                       <Text fontSize="xs" color="gray.400" whiteSpace="nowrap">0 = never</Text>
                     </HStack>
                   </FormControl>
-                </SimpleGrid>
+                </VStack>
               </Box>
             </Collapse>
           </Box>

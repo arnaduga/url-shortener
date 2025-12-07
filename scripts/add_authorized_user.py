@@ -5,6 +5,7 @@ Script to add authorized users to the DynamoDB auth table.
 Usage:
     python scripts/add_authorized_user.py <email> [--inactive]
     python scripts/add_authorized_user.py --init  # Add initial users
+    python scripts/add_authorized_user.py --list  # List all users
 
 Examples:
     # Add a single active user
@@ -13,20 +14,19 @@ Examples:
     # Add an inactive user
     python scripts/add_authorized_user.py user@example.com --inactive
 
-    # Initialize with default users
-    python scripts/add_authorized_user.py --init
+    # List all authorized users
+    python scripts/add_authorized_user.py --list
 """
 
 import boto3
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from botocore.exceptions import ClientError
 
-# Configuration - update these values
-TABLE_NAME = "url-shortener-myproject-auth-users-prod"
-AWS_REGION = "eu-west-1"
+# Import shared configuration
+from config import AWS_REGION, AUTH_USERS_TABLE
 
-# Initial users to add when using --init
+# Initial users to add when using --init (customize as needed)
 INITIAL_USERS = [
     "user1@example.com",
     "user2@example.com"
@@ -36,7 +36,7 @@ INITIAL_USERS = [
 def add_user(email, status="active"):
     """Add a user to the authorized users table"""
     dynamodb = boto3.resource('dynamodb', region_name=AWS_REGION)
-    table = dynamodb.Table(TABLE_NAME)
+    table = dynamodb.Table(AUTH_USERS_TABLE)
 
     try:
         # Check if user already exists
@@ -55,7 +55,7 @@ def add_user(email, status="active"):
         item = {
             'email': email,
             'status': status,
-            'added_date': datetime.utcnow().isoformat()
+            'added_date': datetime.now(timezone.utc).isoformat()
         }
 
         table.put_item(Item=item)
@@ -73,7 +73,7 @@ def add_user(email, status="active"):
 def list_users():
     """List all users in the authorized users table"""
     dynamodb = boto3.resource('dynamodb', region_name=AWS_REGION)
-    table = dynamodb.Table(TABLE_NAME)
+    table = dynamodb.Table(AUTH_USERS_TABLE)
 
     try:
         response = table.scan()
@@ -155,7 +155,7 @@ def main():
 
     print(f"Adding user: {email}")
     print(f"Status: {status}")
-    print(f"Table: {TABLE_NAME}")
+    print(f"Table: {AUTH_USERS_TABLE}")
     print(f"Region: {AWS_REGION}\n")
 
     add_user(email, status)
