@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Transform: "AWS::Serverless-2016-10-31"
-Description: zoph.io - url-shortener - https://zoph.io - December 2022
+Description: url-shortener
 ###########################################################
 Parameters:
   ###########################################################
@@ -58,6 +58,7 @@ Resources:
       Environment:
         Variables:
           AUTH_USERS_TABLE: !Sub "${pProductName}-${pProjectName}-auth-users-${pEnv}"
+          API_KEYS_TABLE: !Sub "${pProductName}-${pProjectName}-api-keys-${pEnv}"
           GOOGLE_CLIENT_ID: !Ref pGoogleClientId
       Policies:
         - Version: "2012-10-17"
@@ -67,6 +68,11 @@ Resources:
                 - dynamodb:GetItem
                 - dynamodb:UpdateItem
               Resource: !GetAtt AuthUsersTable.Arn
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:UpdateItem
+              Resource: !GetAtt ApiKeysTable.Arn
       Tags:
         Project: !Ref pProjectName
         Product: !Ref pProductName
@@ -217,7 +223,7 @@ Resources:
                 type: "aws_proxy"
           /{shortid}:
             get:
-              security: []  # Public endpoint - no authentication required
+              security: [] # Public endpoint - no authentication required
               consumes:
                 - "application/json"
               parameters:
@@ -385,6 +391,25 @@ Resources:
       PointInTimeRecoverySpecification:
         PointInTimeRecoveryEnabled: true
       TableName: !Sub "${pProductName}-${pProjectName}-auth-users-${pEnv}"
+      Tags:
+        - Key: Project
+          Value: !Ref pProjectName
+        - Key: Product
+          Value: !Ref pProductName
+
+  ApiKeysTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      AttributeDefinitions:
+        - AttributeName: key_hash
+          AttributeType: S
+      KeySchema:
+        - AttributeName: key_hash
+          KeyType: HASH
+      BillingMode: PAY_PER_REQUEST
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      TableName: !Sub "${pProductName}-${pProjectName}-api-keys-${pEnv}"
       Tags:
         - Key: Project
           Value: !Ref pProjectName
