@@ -119,6 +119,12 @@ delete:
 get_distribution_id:
 	@aws cloudfront list-distributions --query 'DistributionList.Items[?Origins.Items[0].DomainName==`short.${Domain}.s3.${AWSRegion}.amazonaws.com`].Id | [0]' --output text
 
+force_api_deploy:
+	@echo "Forcing new API Gateway deployment to clear cache..."
+	@API_ID=$$(aws apigateway get-rest-apis --region ${AWSRegion} --query "items[?name=='${Product}-${Project}-api-${Environment}'].id" --output text); \
+	aws apigateway create-deployment --rest-api-id $$API_ID --stage-name prod --region ${AWSRegion} --description "Force cache refresh"
+	@echo "API Gateway redeployed successfully"
+
 clean:
 	@rm -fr build/
 	@rm -fr dist/

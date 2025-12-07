@@ -88,11 +88,12 @@ export const UrlShortenerForm = () => {
   const toast = useToast();
   const { isOpen, onOpen, onClose } = useDisclosure();
 
-  // URL validation regex
+  // URL validation using native URL API
   const isValidUrl = (url) => {
     try {
-      const urlPattern = /^https?:\/\/(www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_\+.~#?&//=]*)$/;
-      return urlPattern.test(url);
+      const parsedUrl = new URL(url);
+      // Only allow http and https protocols
+      return parsedUrl.protocol === 'http:' || parsedUrl.protocol === 'https:';
     } catch (error) {
       return false;
     }

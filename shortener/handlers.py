@@ -202,7 +202,7 @@ def check_shortid_exists(event, context):
             "headers": {
                 "Access-Control-Allow-Headers": "Content-Type",
                 "Access-Control-Allow-Origin": "*",
-                "Access-Control-Allow-Methods": "OPTIONS,GET",
+                "Access-Control-Allow-Methods": "HEAD,GET,OPTIONS",
             },
             "body": json.dumps({"message": "Missing short_id"}),
         }
@@ -216,7 +216,7 @@ def check_shortid_exists(event, context):
                 "headers": {
                     "Access-Control-Allow-Headers": "Content-Type",
                     "Access-Control-Allow-Origin": "*",
-                    "Access-Control-Allow-Methods": "OPTIONS,GET",
+                    "Access-Control-Allow-Methods": "HEAD,GET,OPTIONS",
                 },
                 "body": json.dumps({"exists": True}),
             }
@@ -227,7 +227,7 @@ def check_shortid_exists(event, context):
                 "headers": {
                     "Access-Control-Allow-Headers": "Content-Type",
                     "Access-Control-Allow-Origin": "*",
-                    "Access-Control-Allow-Methods": "OPTIONS,GET",
+                    "Access-Control-Allow-Methods": "HEAD,GET,OPTIONS",
                 },
                 "body": json.dumps({"exists": False}),
             }
@@ -238,7 +238,7 @@ def check_shortid_exists(event, context):
             "headers": {
                 "Access-Control-Allow-Headers": "Content-Type",
                 "Access-Control-Allow-Origin": "*",
-                "Access-Control-Allow-Methods": "OPTIONS,GET",
+                "Access-Control-Allow-Methods": "HEAD,GET,OPTIONS",
             },
             "body": json.dumps({"error": "Internal server error"}),
         }

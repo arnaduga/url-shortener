@@ -37,11 +37,11 @@ function parseChangelog(content, maxVersions = 3) {
       // Save previous version if exists
       if (currentVersion) {
         versions.push(currentVersion);
-      }
 
-      // Stop if we have enough versions
-      if (versions.length >= maxVersions) {
-        break;
+        // Stop if we have enough versions
+        if (versions.length >= maxVersions) {
+          break;
+        }
       }
 
       // Start new version
@@ -91,8 +91,8 @@ function parseChangelog(content, maxVersions = 3) {
     }
   }
 
-  // Don't forget the last version
-  if (currentVersion) {
+  // Don't forget the last version (if we haven't reached the limit)
+  if (currentVersion && versions.length < maxVersions) {
     versions.push(currentVersion);
   }
 
